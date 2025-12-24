@@ -629,7 +629,7 @@ static int k3_r5_suspend_late(struct device *dev)
 	struct k3_r5_core *core;
 	int ret = 0;
 
-	list_for_each_entry(core, &cluster->cores, elem) {
+	list_for_each_entry_reverse(core, &cluster->cores, elem) {
 		struct k3_r5_rproc *kproc;
 		struct rproc *rproc;
 
