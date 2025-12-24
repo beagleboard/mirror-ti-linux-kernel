@@ -168,6 +168,7 @@ struct k3_r5_core {
  * @core: cached pointer to r5 core structure being used
  * @rmem: reserved memory regions data
  * @num_rmems: number of reserved memory regions
+ * @is_suspending: flag to denote if system suspend has started
  */
 struct k3_r5_rproc {
 	struct device *dev;
@@ -182,6 +183,7 @@ struct k3_r5_rproc {
 	struct completion suspend_comp;
 	struct notifier_block pm_notifier;
 	u32 suspend_status;
+	bool is_suspending;
 };
 
 /**
@@ -294,6 +296,10 @@ static void k3_r5_rproc_mbox_callback(struct mbox_client *client, void *data)
 		complete(&kproc->suspend_comp);
 		break;
 	default:
+		if (kproc->is_suspending) {
+			dev_err(dev, "received stale message after suspend, dropping");
+			return;
+		}
 		/* silently handle all other valid messages */
 		if (msg >= RP_MBOX_READY && msg < RP_MBOX_END_MSG)
 			return;
@@ -519,6 +525,7 @@ static int k3_r5_suspend(struct rproc *rproc)
 	}
 
 	kproc->suspend_status = 0;
+	kproc->is_suspending = 1;
 	reinit_completion(&kproc->suspend_comp);
 
 	ret = mbox_send_message(kproc->mbox, (void *)msg);
@@ -563,6 +570,8 @@ static int k3_r5_resume(struct rproc *rproc)
 
 	if (rproc->state != RPROC_SUSPENDED)
 		return ret;
+
+	kproc->is_suspending = 0;
 
 	ret = get_core_status(core, &cstatus);
 	if (ret) {
@@ -1532,6 +1541,7 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 		kproc->core = core;
 		kproc->dev = cdev;
 		kproc->rproc = rproc;
+		kproc->is_suspending = 0;
 		core->rproc = rproc;
 
 		ret = k3_r5_rproc_request_mbox(rproc);
