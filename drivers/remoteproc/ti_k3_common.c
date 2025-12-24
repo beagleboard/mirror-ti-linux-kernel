@@ -660,24 +660,35 @@ int k3_rproc_suspend(struct rproc *rproc)
 	if (rproc->state != RPROC_RUNNING)
 		return ret;
 
-	kproc->suspend_status = 0;
-	reinit_completion(&kproc->suspend_comp);
+	/*
+	 * DSP firmwares on J7* devices get into a bad state after responding to
+	 * suspend message from Linux. As a workaround do not send the supsend
+	 * message to DSPs on J7* devices and assume they are always ready for
+	 * suspend.
+	 */
+	if (kproc->data->fw_suspend_handshake) {
+		kproc->suspend_status = 0;
+		reinit_completion(&kproc->suspend_comp);
 
-	ret = mbox_send_message(kproc->mbox, (void *)msg);
-	if (ret < 0) {
-		dev_err(dev, "PM mbox_send_message failed: %d\n", ret);
-		return ret;
+		ret = mbox_send_message(kproc->mbox, (void *)msg);
+		if (ret < 0) {
+			dev_err(dev, "PM mbox_send_message failed: %d\n", ret);
+			return ret;
+		}
+
+		ret = wait_for_completion_timeout(&kproc->suspend_comp, to);
+		if (ret == 0) {
+			dev_err(dev, "%s: timedout waiting for rproc completion event\n", __func__);
+			/* Set constraint to keep the device on */
+			dev_pm_qos_add_request(kproc->dev, &qos_req, DEV_PM_QOS_RESUME_LATENCY, 0);
+			return 0;
+		};
+
+		dev_dbg(dev, "%s: suspend ack from remote 0x%x\n", __func__, kproc->suspend_status);
+	} else {
+		kproc->suspend_status = RP_MBOX_SUSPEND_ACK;
 	}
 
-	ret = wait_for_completion_timeout(&kproc->suspend_comp, to);
-	if (ret == 0) {
-		dev_err(dev, "%s: timedout waiting for rproc completion event\n", __func__);
-		/* Set constraint to keep the device on */
-		dev_pm_qos_add_request(kproc->dev, &qos_req, DEV_PM_QOS_RESUME_LATENCY, 0);
-		return 0;
-	};
-
-	dev_dbg(dev, "%s: suspend ack from remote 0x%x\n", __func__, kproc->suspend_status);
 	if (kproc->suspend_status == RP_MBOX_SUSPEND_ACK) {
 		/* shutdown the remote core */
 		ret = rproc_shutdown(rproc);
