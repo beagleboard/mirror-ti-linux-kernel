@@ -199,6 +199,7 @@
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&vdd_3v3>;
 		regulator-boot-on;
+		regulator-always-on;
 		enable-active-high;
 		gpio = <&wkup_gpio0 1 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
