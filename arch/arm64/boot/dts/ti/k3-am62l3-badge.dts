@@ -568,13 +568,6 @@
 			 "","","","","","","","","lora_busy","", //GPIO0_80->89
 			 "","","","","lora_dio","button_right","","","","", //GPIO0_90->99
 			 "","","","","button_back","","","","",""; //GPIO0_100->109
-
-	lora-reset {
-		gpio-hog;
-		gpios = <34 GPIO_ACTIVE_LOW>;
-		output-high; /* Keep out of reset by default */
-		line-name = "RESET";
-	};
 };
 
 &main_gpio2 {
