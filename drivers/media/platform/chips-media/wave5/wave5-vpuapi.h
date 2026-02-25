@@ -49,6 +49,10 @@ enum vpu_instance_state {
 #define WAVE5_DEC_HEVC_BUF_SIZE(_w, _h) (DIV_ROUND_UP(_w, 64) * DIV_ROUND_UP(_h, 64) * 256 + 64)
 #define WAVE5_DEC_AVC_BUF_SIZE(_w, _h) ((((ALIGN(_w, 256) / 16) * (ALIGN(_h, 16) / 16)) + 16) * 80)
 
+#define IS_WRAP(_v, _max) ((_v % _max) ? 1 : 0)
+#define DEC_BUF_OFFSET 3
+#define MAX_TIMESTAMP_CIR_BUF 30
+
 #define WAVE5_FBC_LUMA_TABLE_SIZE(_w, _h) (ALIGN(_h, 64) * ALIGN(_w, 256) / 32)
 #define WAVE5_FBC_CHROMA_TABLE_SIZE(_w, _h) (ALIGN((_h), 64) * ALIGN((_w) / 2, 256) / 32)
 #define WAVE5_ENC_AVC_BUF_SIZE(_w, _h) (ALIGN(_w, 64) * ALIGN(_h, 64) / 32)
@@ -738,6 +742,21 @@ struct enc_info {
 	u32 param_buf_size;
 };
 
+/**
+ * struct timestamp_circ_buf - Circular buffer for timestamp tracking
+ * @buf: Array of timestamps for decoded frames
+ * @head: Write position for incoming timestamps
+ * @tail: Read position for outgoing timestamps
+ *
+ * Used in dmabuf mode to maintain timestamp ordering when hardware
+ * reorders frames between decode and display order.
+ */
+struct timestamp_circ_buf {
+	u64 buf[MAX_TIMESTAMP_CIR_BUF];
+	int head;
+	int tail;
+};
+
 struct vpu_device {
 	struct device *dev;
 	struct v4l2_device v4l2_dev;
@@ -809,12 +828,14 @@ struct vpu_instance {
 	struct frame_buffer frame_buf[MAX_REG_FRAME];
 	struct vpu_buf frame_vbuf[MAX_REG_FRAME];
 	u32 fbc_buf_count;
+	u32 dst_buf_count; /* total destination buffers allocated */
 	u32 queued_src_buf_num;
 	u32 queued_dst_buf_num;
 	struct list_head avail_src_bufs;
 	struct list_head avail_dst_bufs;
 	struct v4l2_rect conf_win;
 	u64 timestamp;
+	struct timestamp_circ_buf time_stamp; /* timestamps for dmabuf mode */
 	enum frame_buffer_format output_format;
 	bool cbcr_interleave;
 	bool nv21;
@@ -841,6 +862,10 @@ struct vpu_instance {
 	unsigned int bit_rate;
 	unsigned int encode_aud;
 	struct enc_wave_param enc_param;
+	unsigned int *map_index;
+	dma_addr_t *mapped_dma_addr;
+	unsigned int cap_io_mode;
+	struct mutex inst_lock;
 };
 
 void wave5_vdi_write_register(struct vpu_device *vpu_dev, u32 addr, u32 data);

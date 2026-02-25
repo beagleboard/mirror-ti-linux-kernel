@@ -57,6 +57,8 @@ void wave5_cleanup_instance(struct vpu_instance *inst, struct file *filp)
 	kfifo_free(&inst->irq_status);
 	ida_free(&inst->dev->inst_ida, inst->id);
 	kfree(inst->codec_info);
+	kfree(inst->map_index);
+	kfree(inst->mapped_dma_addr);
 	kfree(inst);
 }
 
